@@ -32,6 +32,10 @@ int main()
     int bs = 256;
 
     /* 2D grid */
+    // N + bs - 1 / bs: 计算需要多少block. (+bs-1)是为了向上取整. (N/bs是向下取整, 加一个bs-1来向上取整. 防止block数量不够组成那么多线程.)
+    // ceil(...): 也是为了向上取整. 防止组成的block数量不够N + bs - 1 / bs
+    // 比如bs = 5, N = 37 -> N + bs - 1 / bs = 8. 至少需要8个block才能组成足够的线程. 只是最后1个block会有空余thread没被使用.
+    // sqrt(8) = 2.xxx -> ceil(sqrt) = 3. -> 最后是3*3=9个thread
     int s = ceil(sqrt((N + bs - 1.) / bs));
     cout<<s<<endl;
     // 定义套分配的grid形状
