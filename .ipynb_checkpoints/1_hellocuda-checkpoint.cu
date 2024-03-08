@@ -17,7 +17,7 @@ int main() {
     // 第一个1代表分配几个block
     // 第二个1代表1个block内分配几个线程
     // 去做hello_cuda这件事
-    hello_cuda<<< 2, 3 >>>();
+    hello_cuda<<< 1, 1 >>>();
     
     // 同步: CPU等待GPU上的CUDA kernel执行
     // 不写的话就是CPU可能会比GPU先执行完

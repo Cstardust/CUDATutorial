@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <iostream>
+
+using std::cout;
+using std::endl;
 
 typedef float FLOAT;
 
@@ -29,12 +33,14 @@ int main()
 
     /* 2D grid */
     int s = ceil(sqrt((N + bs - 1.) / bs));
+    cout<<s<<endl;
+    // 定义套分配的grid形状
     dim3 grid(s, s);
     /* 1D grid */
     // int s = ceil((N + bs - 1.) / bs);
     // dim3 grid(s);
 
-    FLOAT *dx, *hx;
+    FLOAT *dx, *hx;     // hx: host_x. CPU上的x向量; dx: dimesion. GPU上的x向量
     FLOAT *dy, *hy;
     FLOAT *dz, *hz;
 
@@ -55,23 +61,30 @@ int main()
     for (int i = 0; i < N; i++) {
         hx[i] = 1;
         hy[i] = 1;
+        if (hz[i] != 0) {
+            cout<<i<<" "<<hz[i]<<endl;
+        }
     }
 
     /* copy data to GPU */
     cudaMemcpy(dx, hx, nbytes, cudaMemcpyHostToDevice);
     cudaMemcpy(dy, hy, nbytes, cudaMemcpyHostToDevice);
 
+    // start, stop 计时
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
     /* launch GPU kernel */
-    vec_add<<<grid, bs>>>(dx, dy, dz, N);
+    // grid: 描述grid内有多少block
+    // bs: 描述block内有多少thread
+    vec_add<<<grid, bs>>>(dx, dy, dz, N);   // dz[i] = dx[i] + dy[i]
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds, start, stop);  
     
 	/* copy GPU result to CPU */
+    // 将结果从dz拷贝到hz
     cudaMemcpy(hz, dz, nbytes, cudaMemcpyDeviceToHost);
 
     /* CPU compute */
