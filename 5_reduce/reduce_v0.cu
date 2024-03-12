@@ -15,6 +15,9 @@ __global__ void reduce_v0(float *d_in,float *d_out){
     // load: 每个线程加载一个元素到shared mem对应位置
     smem[tid] = d_in[gtid];
     // 涉及到对shared memory的读写最好都加上__syncthreads
+    if (blockIdx.x > 200) {
+        printf("block %d, thread %d\n", blockIdx.x, threadIdx.x);
+    }
     __syncthreads();
 
     // 每个线程在shared memory上跨index加另一个元素，直到跨度>线程数量

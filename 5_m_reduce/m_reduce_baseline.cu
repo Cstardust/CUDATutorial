@@ -86,4 +86,9 @@ int main()
     printf("cpu: %.lf, gpu: %.lf\n", h_res, *hs);
     printf("reduce_baseline latency: %.lf ms\n", milliseconds);
     // latency: 562 ms
+
+    cudaFree(da);
+    cudaFree(ds);
+    free(ha);
+    free(hs);
 }
