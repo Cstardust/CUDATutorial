@@ -4,16 +4,23 @@
 #include<cassert>
 
 
-// 引入并行 + shared mem
-// 并行
-    // 每个block之间并行
-    // 对于每个block内部的thread, 在不同迭代之间是串行的, 但是在每次迭代内部, thread是并行的.
-// shared mem
-    // baseline中, 每次加法都是对global mem进行读取, 故我们现在将其转移至shared mem.
-    // 每个block都有一个shared mem, 且大小一般为64KB. 所以256 * 4 / 1024 = 1KB, 完全够用.
-    // 由于__shared__变量大小要在编译期间确定, 所以模板偏特化来指明__shared__数组大小.
+// v0:
+    // 引入并行 + shared mem
+    // 并行
+        // 每个block之间并行
+        // 对于每个block内部的thread, 在不同迭代之间是串行的, 但是在每次迭代内部, thread是并行的.
+    // shared mem
+        // baseline中, 每次加法都是对global mem进行读取, 故我们现在将其转移至shared mem.
+        // 每个block都有一个shared mem, 且大小一般为64KB. 所以256 * 4 / 1024 = 1KB, 完全够用.
+        // 由于__shared__变量大小要在编译期间确定, 所以模板偏特化来指明__shared__数组大小.
+
+// v1: 
+    // 消除divergence
+
+// v2:
+    // 消除bank conflict
 template<int block_size>
-__global__ void reduce_v0(float *input, float *output, const int N)     // 这个N必须传值, 不能传常量左值引用！不然会有未定义事情发生！! 找了半天才找到！
+__global__ void reduce_v2(float *input, float *output, const int N)     // 这个N必须传值, 不能传常量左值引用！不然会有未定义事情发生！! 找了半天才找到！
 {
     // block_size = blockDim.x: 但是blockDim.x是在运行时确定, 所以我们需要通过模板传进来.
     // assert(block_size == blockDim.x); // 256                      
@@ -99,17 +106,17 @@ int main()
     cudaDeviceProp deviceProp;
     cudaGetDeviceProperties(&deviceProp, 0);
 
-    const int N = 2560000;
+    const int N = 25600000;
     int nbytes = N * sizeof(float);
     const int block_size = 256;     // const修饰才能在编译时已知
     int grid_size = min((N + block_size - 1) / block_size, deviceProp.maxGridSize[0]);      // min(10000, 2147483647)
     
     float *ha = (float*)malloc(nbytes);
     float *hs = (float*)malloc(grid_size * sizeof(float));
-    float h_res = 0;
+    float h_res = N * 1.0f;
     for (int i = 0; i < N; ++i) {
         ha[i] = 1;
-        h_res += ha[i];
+        // h_res += ha[i];
     }
 
     float *da = nullptr;
@@ -125,7 +132,7 @@ int main()
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
-    reduce_v0<block_size><<<grid, block>>>(da, ds, N);
+    reduce_v2<block_size><<<grid, block>>>(da, ds, N);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds, start, stop);
@@ -143,6 +150,6 @@ int main()
     // allcated 10000 blocks, thread 256 per block, data counts are 2560000
     // cpu_res == 2560000; gpu_res == 2560000
     // good ans!
-    // latency 0.053 ms
+    // latency 0.298 ms
     return 0;
 }

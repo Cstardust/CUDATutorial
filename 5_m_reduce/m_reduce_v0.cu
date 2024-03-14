@@ -69,17 +69,17 @@ int main()
     cudaDeviceProp deviceProp;
     cudaGetDeviceProperties(&deviceProp, 0);
 
-    const int N = 2560000;
+    const int N = 25600000;
     int nbytes = N * sizeof(float);
     const int block_size = 256;     // const修饰才能在编译时已知
     int grid_size = min((N + block_size - 1) / block_size, deviceProp.maxGridSize[0]);      // min(10000, 2147483647)
     
     float *ha = (float*)malloc(nbytes);
     float *hs = (float*)malloc(grid_size * sizeof(float));
-    float h_res = 0;
+    float h_res = N * 1.0f;
     for (int i = 0; i < N; ++i) {
         ha[i] = 1;
-        h_res += ha[i];
+        // h_res += ha[i];
     }
 
     float *da = nullptr;
@@ -113,6 +113,6 @@ int main()
     // allcated 10000 blocks, thread 256 per block, data counts are 2560000
     // cpu_res == 2560000; gpu_res == 2560000
     // good ans!
-    // latency 2.812 ms.            -> ? 0.083 ms
+    // latency 0.743 ms
     return 0;
 }

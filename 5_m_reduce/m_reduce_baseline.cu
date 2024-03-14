@@ -14,13 +14,13 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
     }
 }
 
-__global__ void reduce_baseline(float* sum, float *input, size_t n)
+__global__ void reduce_baseline(int* sum, int *input, size_t n)
 {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
     printf("id = %d\n", id);
     // input: global memory
     // sum: global memory
-    float s = 0;
+    int s = 0;
     // s: reg
     for(int i = 0; i < n; ++i) 
     {
@@ -31,7 +31,7 @@ __global__ void reduce_baseline(float* sum, float *input, size_t n)
 }
 
 
-static bool check(float cpu_res, float gpu_res) {
+static bool check(int cpu_res, int gpu_res) {
     return cpu_res == gpu_res;
 }
 
@@ -48,23 +48,24 @@ static bool check(float cpu_res, float gpu_res) {
 int main()
 {
     const int N = 25600000;
-    float *da = nullptr, *ha = nullptr;
-    float *ds = nullptr;
-    // float hs = 0;
+    int *da = nullptr, *ha = nullptr;
+    int *ds = nullptr;
+    // int hs = 0;
         // tips: cudaMemcpy 当host端内存作为dst时, host内存必须位于堆上; 不能位于栈上
-    float *hs = nullptr;
-    float h_res = 0;
+    int *hs = nullptr;
+    // float h_res = 0;
+    int h_res = 0;
     
-    ha = (float*)malloc(N * sizeof(float));         // cpu host mem
-    hs = (float*)malloc(sizeof(float));
-    gpuErrchk(cudaMalloc(&da, N * sizeof(float)));  // gpu global mem
-    gpuErrchk(cudaMalloc(&ds, sizeof(float)));
+    ha = (int*)malloc(N * sizeof(int));         // cpu host mem
+    hs = (int*)malloc(sizeof(int));
+    gpuErrchk(cudaMalloc(&da, N * sizeof(int)));  // gpu global mem
+    gpuErrchk(cudaMalloc(&ds, sizeof(int)));
     for(int i = 0; i < N; ++i) {
         ha[i] = 1;
         h_res += ha[i];
     }
     // printf("ha %p; da %p.\n", ha, da);
-    cudaMemcpy(da, ha, N * sizeof(float), cudaMemcpyHostToDevice);  
+    cudaMemcpy(da, ha, N * sizeof(int), cudaMemcpyHostToDevice);  
     
     int grid_shape = 1;
     int block_shape = 1;
@@ -79,11 +80,11 @@ int main()
     cudaEventElapsedTime(&milliseconds, start, stop);
 
     // check
-    gpuErrchk(cudaMemcpy(hs, ds, sizeof(float), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(hs, ds, sizeof(int), cudaMemcpyDeviceToHost));
     if (!check(h_res, *hs)) {
         return 0;
     }
-    printf("cpu: %.lf, gpu: %.lf\n", h_res, *hs);
+    printf("cpu: %d, gpu: %d\n", h_res, *hs);
     printf("reduce_baseline latency: %.lf ms\n", milliseconds);
     // latency: 562 ms
 
