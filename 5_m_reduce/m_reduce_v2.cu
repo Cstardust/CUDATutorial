@@ -32,14 +32,44 @@ __global__ void reduce_v0(float *input, float *output, const int N)     // 这�
     // 等待block内的所有thread对shared mem的load和store完成
     __syncthreads();
 
-    // i: 代表第x轮迭代, 所求和的两个线程的间距为2^x.
+
+    // i: 代表第x轮迭代, 所求和的data的间距为2^x.
     // 最终结果存储到0号位.
     // 这些都是在shared memory上进行计算.
-    for(int i = 1; i < blockDim.x; i *= 2) {
-        if (tid % (i * 2) == 0 && (tid + i) < blockDim.x) {
-            sm[tid] += sm[tid + i];
+
+    // v0: warp divergence
+        // thread tid就对应data[tid]
+        // 每轮迭代, 每个thread tid处理两个data: data[tid] 和 data[tid+i]
+        // 每轮迭代中, 工作的thread散落在各个warp里面
+    // for(int i = 1; i < blockDim.x; i *= 2) {
+        // 这样每次都会间隔几个tid, 才会有一个thread进行工作.
+    //     if (tid % (i * 2) == 0 && (tid + i) < blockDim.x) {
+    //         sm[tid] += sm[tid + i];
+    //     }
+    //     __syncthreads();        // 应该可以放在分支里面, 因为threadId一次没计算, 剩下的迭代也不会参与. 没进入分支的可以直接return.
+    // }
+
+    // v1 after v0: 消除warp divergence
+        // thread tid不对应data[tid], 而是直接对应出要处理的两个data的idx, 并对其进行计算
+        // 这样, 每轮迭代中, 工作的thread都紧挨在一起
+    // 迭代的还是thread处理数据的间隔
+    // for (int i = 1; i < blockDim.x; i *= 2) {
+    //     int data_idx = 2 * i * tid;             // 计算出当前tid对应处理的data下标.
+    //     if (data_idx + i < blockDim.x) {
+    //         sm[data_idx] += sm[data_idx + i]; 
+    //     }
+    //     __syncthreads();
+    // }
+
+    // v2 after v1: 消除bank conflict
+        // 处理data的间隔反过来. 之前是 1 -> 128; 现在变成 128 -> 1
+        // i是间隔, 也是本轮归并data的起点临界, 也是本轮最后一个活跃的thread id). [第一个不活跃的thread id.
+        // 如此, 每个warp内的不同thread, 不会读取同一bank.
+    for (int i = blockDim.x / 2; i > 0; i >>= 1) {
+        if (tid < i) {
+            sm[tid] += sm[tid + i];  
         }
-        __syncthreads();        // 应该可以放在分支里面, 因为threadId一次没计算, 剩下的迭代也不会参与. 没进入分支的可以直接return.
+        __syncthreads();    // 别忘了. 下一轮迭代会依赖上一轮的结果. 所以本轮要等所有thread都读写shared mem完成. latency 0.045 ms
     }
 
     if (tid != 0)
@@ -113,6 +143,6 @@ int main()
     // allcated 10000 blocks, thread 256 per block, data counts are 2560000
     // cpu_res == 2560000; gpu_res == 2560000
     // good ans!
-    // latency 2.812 ms.            -> ? 0.083 ms
+    // latency 0.053 ms
     return 0;
 }
