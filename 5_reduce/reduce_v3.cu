@@ -13,12 +13,19 @@ __global__ void reduce_v3(float *d_in, float *d_out){
     // ep. blocksize = 2, blockIdx.x = 1, when tid = 0, gtid = 4, gtid + blockSize = 6; when tid = 1, gtid = 5, gtid + blockSize = 7
     // ep. blocksize = 2, blockIdx.x = 0, when tid = 0, gtid = 0, gtid + blockSize = 2; when tid = 1, gtid = 1, gtid + blockSize = 3
     // so, we can understand L18, one thread handle data located in tid and tid + blockSize 
+    // 当前thread负责归并的起始data在全局数组d_in中的id
     unsigned int gtid = blockIdx.x * (blockSize * 2) + threadIdx.x;
+    if (blockIdx.x >= 50000 - 1) {
+        printf("block size %d, block[%d], thread[%d], gtid %d, gtid + blockSize %d\n", blockSize, blockIdx.x, threadIdx.x, gtid, gtid + blockSize);
+    }
+    // 之前一个block 8个warp, 每个block内在第一轮迭代之前，warp 0-8进行了一次load（对global [0,255]）, 但没进行别的工作，第一轮迭代是前4个warp工作, 后4个warp空闲; 第二轮是前2个warp工作...; 
+    // 现在一个block 4个warp, 每个block内第一轮迭代之前, warp 0 1 2 3在load之前就进行了一次reduce，然后第一次for迭代是warp0, 1在工作; 23 不工作了; 同理...
+    // 现在一个block 8个warp, 每个block内第一轮迭代之前, warp 0-8在load之前就进行了一次reduce（对global[0,511]，然后第一次for迭代是warp0, 1, 2, 3在工作; 4567 不工作了; 同理... (主要是为了让4567也工作一次，那么就在第一次的load工作)
     // load: 每个线程加载两个元素到shared mem对应位置
     smem[tid] = d_in[gtid] + d_in[gtid + blockSize];
     __syncthreads();
 
-    // 同v2：在不发生warp divergence的前提下，从之前的当前线程ID加2*线程ID位置然后不断加上*2位置上的数据，改成不断地对半相加，以消除bank conflict
+    // 同v2：在不发生warp divergence的前提下, 从之前的当前线程ID加2*线程ID位置然后不断加上*2位置上的数据，改成不断地对半相加，以消除bank conflict
     // 此时一个block对d_in这块数据的reduce sum结果保存在id为0的线程上面
     for (unsigned int index = blockDim.x / 2; index > 0; index >>= 1) {
         if (tid < index) {
@@ -70,14 +77,16 @@ int main(){
 
     cudaMemcpy(d_a, a, N * sizeof(float), cudaMemcpyHostToDevice);
 
-    dim3 Grid(GridSize);
-    dim3 Block(blockSize / 2);
-
+    dim3 Grid(GridSize/2);        //  10000
+    // dim3 Block(blockSize / 2);  //  128
+    dim3 Block(blockSize);
+    
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
-    reduce_v3<blockSize / 2><<<Grid,Block>>>(d_a, d_out);
+    // reduce_v3<blockSize / 2><<<Grid,Block>>>(d_a, d_out);
+    reduce_v3<blockSize><<<Grid,Block>>>(d_a, d_out);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds, start, stop);
